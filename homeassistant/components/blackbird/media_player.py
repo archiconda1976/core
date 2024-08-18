@@ -66,7 +66,6 @@ PLATFORM_SCHEMA = vol.All(
     ),
 )
 
-
 def setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
