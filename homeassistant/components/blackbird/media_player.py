@@ -1,4 +1,4 @@
-"""Support for interfacing with Monoprice Blackbird 4k 8x8 HDBaseT Matrix."""
+"""Support for interfacing with Monoprice Blackbird 4k 8x8 and 4K 4x4 HDBaseT Matrix."""
 
 from __future__ import annotations
 
@@ -26,7 +26,14 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import DOMAIN, SERVICE_SETALLZONES
+from .const import (
+    ATTR_SOURCE,
+    CONF_SOURCES,
+    CONF_ZONES,
+    DATA_BLACKBIRD,
+    DOMAIN,
+    SERVICE_SETALLZONES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,17 +43,9 @@ ZONE_SCHEMA = vol.Schema({vol.Required(CONF_NAME): cv.string})
 
 SOURCE_SCHEMA = vol.Schema({vol.Required(CONF_NAME): cv.string})
 
-CONF_ZONES = "zones"
-CONF_SOURCES = "sources"
-
-DATA_BLACKBIRD = "blackbird"
-
-ATTR_SOURCE = "source"
-
 BLACKBIRD_SETALLZONES_SCHEMA = MEDIA_PLAYER_SCHEMA.extend(
     {vol.Required(ATTR_SOURCE): cv.string}
 )
-
 
 # Valid zone ids: 1-8
 ZONE_IDS = vol.All(vol.Coerce(int), vol.Range(min=1, max=8))
@@ -62,6 +61,7 @@ PLATFORM_SCHEMA = vol.All(
             vol.Exclusive(CONF_HOST, CONF_TYPE): cv.string,
             vol.Required(CONF_ZONES): vol.Schema({ZONE_IDS: ZONE_SCHEMA}),
             vol.Required(CONF_SOURCES): vol.Schema({SOURCE_IDS: SOURCE_SCHEMA}),
+            vol.Optional(CONF_TYPE): cv.positive_int,
         }
     ),
 )
@@ -79,11 +79,12 @@ def setup_platform(
 
     port = config.get(CONF_PORT)
     host = config.get(CONF_HOST)
+    matrix_type: int = config.get(CONF_TYPE, 0)
 
     connection = None
     if port is not None:
         try:
-            blackbird = get_blackbird(port)
+            blackbird = get_blackbird(port, True, matrix_type)
             connection = port
         except SerialException:
             _LOGGER.error("Error connecting to the Blackbird controller")
@@ -91,7 +92,7 @@ def setup_platform(
 
     if host is not None:
         try:
-            blackbird = get_blackbird(host, False)
+            blackbird = get_blackbird(host, False, matrix_type)
             connection = host
         except TimeoutError:
             _LOGGER.error("Error connecting to the Blackbird controller")
