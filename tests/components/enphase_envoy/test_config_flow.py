@@ -14,7 +14,6 @@ from homeassistant.components.enphase_envoy.const import (
     OPTION_DIAGNOSTICS_INCLUDE_FIXTURES_DEFAULT_VALUE,
 )
 from homeassistant.config_entries import (
-    SOURCE_REAUTH,
     SOURCE_RECONFIGURE,
     SOURCE_USER,
     SOURCE_ZEROCONF,
@@ -636,14 +635,7 @@ async def test_reauth(
 ) -> None:
     """Test we reauth auth."""
     await setup_integration(hass, config_entry)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={
-            "source": SOURCE_REAUTH,
-            "unique_id": config_entry.unique_id,
-            "entry_id": config_entry.entry_id,
-        },
-    )
+    result = await config_entry.start_reauth_flow(hass)
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -714,7 +706,7 @@ async def test_reconfigure(
         },
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "reconfigure_confirm"
     assert result["errors"] == {}
 
     # original entry
@@ -756,7 +748,7 @@ async def test_reconfigure_nochange(
         },
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "reconfigure_confirm"
     assert result["errors"] == {}
 
     # original entry
@@ -798,7 +790,7 @@ async def test_reconfigure_otherenvoy(
         },
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "reconfigure_confirm"
     assert result["errors"] == {}
 
     # let mock return different serial from first time, sim it's other one on changed ip
@@ -944,7 +936,7 @@ async def test_reconfigure_change_ip_to_existing(
         },
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "reconfigure_confirm"
     assert result["errors"] == {}
 
     # original entry

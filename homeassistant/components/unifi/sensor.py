@@ -174,6 +174,12 @@ def async_device_outlet_supported_fn(hub: UnifiHub, obj_id: str) -> bool:
     return hub.api.devices[obj_id].outlet_ac_power_budget is not None
 
 
+@callback
+def async_device_uplink_mac_supported_fn(hub: UnifiHub, obj_id: str) -> bool:
+    """Determine if a device supports reading uplink MAC address."""
+    return "uplink_mac" in hub.api.devices[obj_id].raw.get("uplink", {})
+
+
 def device_system_stats_supported_fn(
     stat_index: int, hub: UnifiHub, obj_id: str
 ) -> bool:
@@ -371,11 +377,11 @@ class UnifiSensorEntityDescription(
 ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     UnifiSensorEntityDescription[Clients, Client](
         key="Bandwidth sensor RX",
+        translation_key="client_bandwidth_rx",
         device_class=SensorDeviceClass.DATA_RATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfDataRate.MEGABYTES_PER_SECOND,
-        icon="mdi:upload",
         allowed_fn=async_bandwidth_sensor_allowed_fn,
         api_handler_fn=lambda api: api.clients,
         device_info_fn=async_client_device_info_fn,
@@ -388,11 +394,11 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Clients, Client](
         key="Bandwidth sensor TX",
+        translation_key="client_bandwidth_tx",
         device_class=SensorDeviceClass.DATA_RATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfDataRate.MEGABYTES_PER_SECOND,
-        icon="mdi:download",
         allowed_fn=async_bandwidth_sensor_allowed_fn,
         api_handler_fn=lambda api: api.clients,
         device_info_fn=async_client_device_info_fn,
@@ -421,13 +427,13 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Ports, Port](
         key="Port Bandwidth sensor RX",
+        translation_key="port_bandwidth_rx",
         device_class=SensorDeviceClass.DATA_RATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
         suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
-        icon="mdi:download",
         allowed_fn=lambda hub, _: hub.config.option_allow_bandwidth_sensors,
         api_handler_fn=lambda api: api.ports,
         available_fn=async_device_available_fn,
@@ -439,13 +445,13 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Ports, Port](
         key="Port Bandwidth sensor TX",
+        translation_key="port_bandwidth_tx",
         device_class=SensorDeviceClass.DATA_RATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
         suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
-        icon="mdi:upload",
         allowed_fn=lambda hub, _: hub.config.option_allow_bandwidth_sensors,
         api_handler_fn=lambda api: api.ports,
         available_fn=async_device_available_fn,
@@ -472,6 +478,7 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Wlans, Wlan](
         key="WLAN clients",
+        translation_key="wlan_clients",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         api_handler_fn=lambda api: api.wlans,
@@ -484,6 +491,7 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Devices, Device](
         key="Device clients",
+        translation_key="device_clients",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
@@ -572,7 +580,22 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
         value_fn=lambda hub, device: device.general_temperature,
     ),
     UnifiSensorEntityDescription[Devices, Device](
+        key="Device Uplink MAC",
+        translation_key="device_uplink_mac",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        api_handler_fn=lambda api: api.devices,
+        available_fn=async_device_available_fn,
+        device_info_fn=async_device_device_info_fn,
+        name_fn=lambda device: "Uplink MAC",
+        object_fn=lambda api, obj_id: api.devices[obj_id],
+        unique_id_fn=lambda hub, obj_id: f"device_uplink_mac-{obj_id}",
+        supported_fn=async_device_uplink_mac_supported_fn,
+        value_fn=lambda hub, device: device.raw.get("uplink", {}).get("uplink_mac"),
+        is_connected_fn=lambda hub, obj_id: hub.api.devices[obj_id].state == 1,
+    ),
+    UnifiSensorEntityDescription[Devices, Device](
         key="Device State",
+        translation_key="device_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
         api_handler_fn=lambda api: api.devices,
@@ -586,6 +609,7 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Devices, Device](
         key="Device CPU utilization",
+        translation_key="device_cpu_utilization",
         entity_category=EntityCategory.DIAGNOSTIC,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -600,6 +624,7 @@ ENTITY_DESCRIPTIONS: tuple[UnifiSensorEntityDescription, ...] = (
     ),
     UnifiSensorEntityDescription[Devices, Device](
         key="Device memory utilization",
+        translation_key="device_memory_utilization",
         entity_category=EntityCategory.DIAGNOSTIC,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
