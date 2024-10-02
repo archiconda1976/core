@@ -1,0 +1,62 @@
+save_system_favorite:
+  # Description of the service
+  description: Saves the current active source for a zone to the system favorite list at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: System favorite to save, valid range 1 - 32
+      example: "1"
+    name:
+      required: false
+      description: Optional display name for favorite
+      example: "My System Favorite"
+
+save_zone_favorite:
+  # Description of the service
+  description: Saves the current active source for a zone to the zone favorite list at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: Zone favorite to save, valid range 1 - 2/4
+      example: "1"
+    name:
+      required: false
+      description: Optional display name for favorite
+      example: "My Zone Favorite"
+
+delete_system_favorite:
+  # Description of the service
+  description: Removes favorite at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: System favorite to save, valid range 1 - 32
+      example: "1"
+
+delete_zone_favorite:
+  description: Removes a zone favorite at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: Zone favorite to save, valid range 1 - 2/4
+      example: "1"
