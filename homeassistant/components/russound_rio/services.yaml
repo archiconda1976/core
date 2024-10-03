@@ -60,3 +60,29 @@ delete_zone_favorite:
       required: true
       description: Zone favorite to save, valid range 1 - 2/4
       example: "1"
+
+restore_system_favorite:
+  description: Changes to a system favorite at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: Zone favorite to save, valid range 1 - 32
+      example: "1"
+
+restore_zone_favorite:
+  description: Changes to a zone favorite at indicated position
+
+  fields:
+    entity_id:
+      required: true
+      description: Russound Media Player Instance for Zone
+      example: "Media_Player.RussoundZone1"
+    favorite_id:
+      required: true
+      description: Zone favorite to save, valid range 1 - 2/4
+      example: "1"

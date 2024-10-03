@@ -9,7 +9,7 @@ import logging
 
 from . import RussoundConfigEntry
 from aiorussound import Controller
-from aiorussound.models import Source, Favorite
+from aiorussound.models import Favorite, Source
 from aiorussound.rio import ZoneControlSurface
 
 from homeassistant.components.media_player import (
@@ -23,40 +23,37 @@ from homeassistant.components.media_player import (
     MediaType,
 )
 from homeassistant.config_entries import SOURCE_IMPORT
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import (
     DOMAIN as HOMEASSISTANT_DOMAIN,
-    Event,
     HomeAssistant,
     ServiceCall,
 )
-from homeassistant.helpers.entity import Entity
 from homeassistant.data_entry_flow import FlowResultType
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
     MENU_PLAY_SYSTEM_FAVORITE,
     MENU_PLAY_ZONE_FAVORITE,
-    MENU_SOURCE,
-    MENU_SOURCE_TITLE,
     MENU_SYSTEM_FAVORITE,
     MENU_SYSTEM_FAVORITE_TITLE,
     MENU_ZONE_FAVORITE,
     MENU_ZONE_FAVORITE_TITLE,
     MP_FEATURES_BY_FLAG,
     RUSSOUND_MEDIA_TITLE,
-    RUSSOUND_STREAMER_SOURCE,
+    SERVICE_CALL_ATTR_ENTITY_ID,
     SERVICE_CALL_ATTR_FAVORITE_ID,
-    SERVICE_SAVE_SYSTEM_FAVORITE,
-    SERVICE_SAVE_ZONE_FAVORITE,
+    SERVICE_CALL_ATTR_FAVORITE_NAME,
     SERVICE_DELETE_SYSTEM_FAVORITE,
     SERVICE_DELETE_ZONE_FAVORITE,
-    SERVICE_CALL_ATTR_ENTITY_ID,
-    SERVICE_CALL_ATTR_FAVORITE_NAME,
+    SERVICE_SAVE_SYSTEM_FAVORITE,
+    SERVICE_SAVE_ZONE_FAVORITE,
+    SERVICE_CHANGE_TO_SYSTEM_FAVORITE,
+    SERVICE_CHANGE_TO_ZONE_FAVORITE,
 )
 
 MEDIA_PLAYER_SCHEMA = vol.Schema({SERVICE_CALL_ATTR_ENTITY_ID: cv.comp_entity_ids})
@@ -125,12 +122,12 @@ async def async_setup_entry(
     """Set up the Russound RIO platform."""
     client = entry.runtime_data
     sources = client.sources
+    entities: list[RussoundZoneDevice] = []
 
-    async_add_entities(
-        RussoundZoneDevice(controller, zone_id, sources)
-        for controller in client.controllers.values()
-        for zone_id in controller.zones
-    )
+    for controller in client.controllers.values():
+        for zone_id in controller.zones:
+            entities.append(RussoundZoneDevice(controller, zone_id, sources))
+    async_add_entities(entities)
 
     async def service_handle(service: ServiceCall) -> None:
         """Handle for services."""
@@ -155,6 +152,10 @@ async def async_setup_entry(
                             await entity.delete_system_favorite(int(favorite_id))
                         elif service.service == SERVICE_DELETE_ZONE_FAVORITE:
                             await entity.delete_zone_favorite(int(favorite_id))
+                        elif service.service == SERVICE_CHANGE_TO_SYSTEM_FAVORITE:
+                            await entity.restore_system_favorite(int(favorite_id))
+                        elif service.service == SERVICE_CHANGE_TO_ZONE_FAVORITE:
+                            await entity.restore_zone_favorite(int(favorite_id))
 
     hass.services.async_register(
         DOMAIN,
@@ -177,6 +178,18 @@ async def async_setup_entry(
     hass.services.async_register(
         DOMAIN,
         SERVICE_DELETE_ZONE_FAVORITE,
+        service_handle,
+        schema=RUSSOUND_SYSTEM_CALL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CHANGE_TO_SYSTEM_FAVORITE,
+        service_handle,
+        schema=RUSSOUND_SYSTEM_CALL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CHANGE_TO_ZONE_FAVORITE,
         service_handle,
         schema=RUSSOUND_SYSTEM_CALL_SCHEMA,
     )
@@ -216,53 +229,27 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
 
     async def save_system_favorite(self, favorite_id: int, favorite_name=None) -> None:
         """Save system favorite to controller."""
-
-        if favorite_name is None:
-            # default to channel name if no name is provided
-            favorite_name = self._current_source().properties.channel_name
-
-        if favorite_name is None:
-            # if no channel name, set a default name
-            favorite_name = f"F{favorite_id}"
-
-        if favorite_id >= 1 and favorite_id <= 32:
-            _LOGGER.debug("Saving system favorite %d", favorite_id)
-            await self._zone.send_event(
-                "saveSystemFavorite", f'"{favorite_name}"', favorite_id
-            )
+        await self._zone.save_system_favorite(favorite_id, favorite_name)
 
     async def save_zone_favorite(self, favorite_id: int, favorite_name=None) -> None:
         """Save zone favorite to contoller."""
-
-        if favorite_name is None:
-            # default to channel name if no name is provided
-            favorite_name = self._current_source().properties.channel_name
-
-        if favorite_name is None:
-            # if no channel name, set a default name
-            favorite_name = f"F{favorite_id}"
-
-        if favorite_id >= 1 and favorite_id <= 32:
-            _LOGGER.debug("Saving zone favorite %d", favorite_id)
-            await self._zone.send_event(
-                "saveZoneFavorite", f'"{favorite_name}"', favorite_id
-            )
+        await self._zone.save_zone_favorite(favorite_id, favorite_name)
 
     async def delete_system_favorite(self, favorite_id: int) -> None:
         """Delete system favorite from contoller."""
-
-        if favorite_id >= 1 and favorite_id <= 32:
-            _LOGGER.debug("Removing system favorite %d", favorite_id)
-            await self._zone.send_event(
-                "KeyRelease", "deleteSystemFavorite", favorite_id
-            )
+        await self._zone.delete_system_favorite(favorite_id)
 
     async def delete_zone_favorite(self, favorite_id: int) -> None:
         """Delete zone favorite from contoller."""
+        await self._zone.delete_zone_favorite(favorite_id)
 
-        if favorite_id >= 1 and favorite_id <= 2:
-            _LOGGER.debug("Removing system favorite %d", favorite_id)
-            await self._zone.send_event("KeyRelease", "deleteZoneFavorite", favorite_id)
+    async def restore_system_favorite(self, favorite_id: int) -> None:
+        """Change to system favorite from contoller for this zone."""
+        await self._zone.restore_system_favorite(favorite_id)
+
+    async def restore_zone_favorite(self, favorite_id: int) -> None:
+        """Change to zone favorite from contoller for this zone."""
+        await self._zone.restore_zone_favorite(favorite_id)
 
     @property
     def _zone(self) -> ZoneControlSurface:
@@ -387,10 +374,10 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         elif path[0] == MENU_ZONE_FAVORITE:
             return await self.async_browse_media_zone_favorites(True)
         elif MENU_PLAY_SYSTEM_FAVORITE in path[0]:
-            await self._zone.send_event("restoreSystemFavorite", media_content_id[11:])
+            await self._zone.restore_system_favorite(int(media_content_id[11:]))
             return
         elif MENU_PLAY_ZONE_FAVORITE in path[0]:
-            await self._zone.send_event("restoreZoneFavorite", media_content_id[13:])
+            await self._zone.restore_zone_favorite(int(media_content_id[12:]))
             return
 
         raise BrowseError(f"Media not found: {media_content_type} / {media_content_id}")
@@ -419,7 +406,9 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
 
     def _get_menu_title(self, favorite: Favorite) -> str:
         return (
-            "["
+            "#"
+            + str(favorite.favorite_id)
+            + "["
             + self._get_source_from_id(favorite.source_id)
             + "] \r\n"
             + favorite.name
@@ -499,9 +488,9 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     ) -> None:
         if media_type == MediaType.MUSIC:
             if MENU_PLAY_SYSTEM_FAVORITE in media_id:
-                await self._zone.send_event("restoreSystemFavorite", media_id[11:])
+                await self._zone.restore_system_favorite(int(media_id[11:]))
             elif MENU_PLAY_ZONE_FAVORITE in media_id:
-                await self._zone.send_event("restoreZoneFavorite", media_id[12:])
+                await self._zone.restore_zone_favorite(int(media_id[12:]))
             else:
                 _LOGGER.error(f"****** media_id: '{media_id}'")
         else:
