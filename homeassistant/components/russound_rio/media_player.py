@@ -9,8 +9,10 @@ from aiorussound.const import FeatureFlag
 from aiorussound.rio import Controller, Source
 from aiorussound.rio.models import PlayStatus
 from aiorussound.util import is_feature_supported
+import voluptuous as vol
 
 from homeassistant.components.media_player import (
+    DOMAIN as MEDIA_PLAYER_DOMAIN,
     BrowseMedia,
     MediaPlayerDeviceClass,
     MediaPlayerEntity,
@@ -20,21 +22,35 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import RussoundConfigEntry, media_browser
 from .const import (
+    ATTR_FAVORITE_ID,
+    ATTR_FAVORITE_NAME,
+    ATTR_FAVORITE_SCOPE,
     CONF_ZONE_SOURCE_EXCLUSION,
     DOMAIN,
+    FAVORITE_SCOPE_SYSTEM,
+    FAVORITE_SCOPE_ZONE,
     RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT,
     RUSSOUND_MEDIA_TYPE_PRESET,
     SELECT_SOURCE_DELAY,
+    SERVICE_RUSSOUND_DELETE_FAVORITE,
+    SERVICE_RUSSOUND_RENAME_SYSTEM_FAVORITE,
+    SERVICE_RUSSOUND_RESTORE_FAVORITE,
+    SERVICE_RUSSOUND_SAVE_FAVORITE,
 )
 from .entity import RussoundBaseEntity, command
 
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 0
+
+FAVORITE_SCOPE_SCHEMA = vol.In((FAVORITE_SCOPE_SYSTEM, FAVORITE_SCOPE_ZONE))
+FAVORITE_ID_SCHEMA = vol.All(vol.Coerce(int), vol.Range(min=1, max=32))
+FAVORITE_NAME_SCHEMA = vol.All(cv.string, vol.Length(min=1, max=50))
 
 
 async def async_setup_entry(
@@ -57,6 +73,38 @@ async def async_setup_entry(
         )
         for controller in client.controllers.values()
         for zone_id in controller.zones
+    )
+
+    if hass.services.has_service(MEDIA_PLAYER_DOMAIN, SERVICE_RUSSOUND_SAVE_FAVORITE):
+        return
+
+    platform = entity_platform.async_get_current_platform()
+    favorite_schema = {
+        vol.Required(ATTR_FAVORITE_ID): FAVORITE_ID_SCHEMA,
+        vol.Required(ATTR_FAVORITE_SCOPE): FAVORITE_SCOPE_SCHEMA,
+    }
+    platform.async_register_entity_service(
+        SERVICE_RUSSOUND_SAVE_FAVORITE,
+        {**favorite_schema, vol.Required(ATTR_FAVORITE_NAME): FAVORITE_NAME_SCHEMA},
+        "async_save_favorite",
+    )
+    platform.async_register_entity_service(
+        SERVICE_RUSSOUND_RESTORE_FAVORITE,
+        favorite_schema,
+        "async_restore_favorite",
+    )
+    platform.async_register_entity_service(
+        SERVICE_RUSSOUND_DELETE_FAVORITE,
+        favorite_schema,
+        "async_delete_favorite",
+    )
+    platform.async_register_entity_service(
+        SERVICE_RUSSOUND_RENAME_SYSTEM_FAVORITE,
+        {
+            vol.Required(ATTR_FAVORITE_ID): FAVORITE_ID_SCHEMA,
+            vol.Required(ATTR_FAVORITE_NAME): FAVORITE_NAME_SCHEMA,
+        },
+        "async_rename_system_favorite",
     )
 
 
@@ -273,6 +321,39 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     async def async_media_seek(self, position: float) -> None:
         """Seek to a position in the current media."""
         await self._zone.set_seek_time(int(position))
+
+    @command
+    async def async_save_favorite(
+        self, favorite_id: int, scope: str, favorite_name: str
+    ) -> None:
+        """Save the current source as a named Russound favorite."""
+        if scope == FAVORITE_SCOPE_SYSTEM:
+            await self._zone.save_system_favorite(favorite_id, favorite_name)
+        else:
+            await self._zone.save_zone_favorite(favorite_id, favorite_name)
+
+    @command
+    async def async_restore_favorite(self, favorite_id: int, scope: str) -> None:
+        """Restore a Russound favorite in this zone."""
+        if scope == FAVORITE_SCOPE_SYSTEM:
+            await self._zone.restore_system_favorite(favorite_id)
+        else:
+            await self._zone.restore_zone_favorite(favorite_id)
+
+    @command
+    async def async_delete_favorite(self, favorite_id: int, scope: str) -> None:
+        """Delete a Russound favorite."""
+        if scope == FAVORITE_SCOPE_SYSTEM:
+            await self._zone.delete_system_favorite(favorite_id)
+        else:
+            await self._zone.delete_zone_favorite(favorite_id)
+
+    @command
+    async def async_rename_system_favorite(
+        self, favorite_id: int, favorite_name: str
+    ) -> None:
+        """Rename a system-wide Russound favorite."""
+        await self._client.rename_system_favorite(favorite_id, favorite_name)
 
     @command
     @override

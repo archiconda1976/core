@@ -1,0 +1,84 @@
+russound_save_favorite:
+  target:
+    entity:
+      integration: russound_rio
+      domain: media_player
+  fields:
+    favorite_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+    scope:
+      required: true
+      selector:
+        select:
+          options:
+            - system
+            - zone
+    favorite_name:
+      required: true
+      selector:
+        text:
+
+russound_restore_favorite:
+  target:
+    entity:
+      integration: russound_rio
+      domain: media_player
+  fields:
+    favorite_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+    scope:
+      required: true
+      selector:
+        select:
+          options:
+            - system
+            - zone
+
+russound_delete_favorite:
+  target:
+    entity:
+      integration: russound_rio
+      domain: media_player
+  fields:
+    favorite_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+    scope:
+      required: true
+      selector:
+        select:
+          options:
+            - system
+            - zone
+
+russound_rename_system_favorite:
+  target:
+    entity:
+      integration: russound_rio
+      domain: media_player
+  fields:
+    favorite_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+    favorite_name:
+      required: true
+      selector:
+        text:

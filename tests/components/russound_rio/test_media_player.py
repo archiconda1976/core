@@ -20,8 +20,17 @@ from homeassistant.components.media_player import (
     SERVICE_SELECT_SOURCE,
 )
 from homeassistant.components.russound_rio.const import (
+    ATTR_FAVORITE_ID,
+    ATTR_FAVORITE_NAME,
+    ATTR_FAVORITE_SCOPE,
     CONF_ZONE_SOURCE_EXCLUSION,
+    FAVORITE_SCOPE_SYSTEM,
+    FAVORITE_SCOPE_ZONE,
     RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT,
+    SERVICE_RUSSOUND_DELETE_FAVORITE,
+    SERVICE_RUSSOUND_RENAME_SYSTEM_FAVORITE,
+    SERVICE_RUSSOUND_RESTORE_FAVORITE,
+    SERVICE_RUSSOUND_SAVE_FAVORITE,
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -354,6 +363,67 @@ async def test_play_media_management_item(
 
     mock_play_media_management.assert_awaited_once_with(
         mock_russound_client.controllers[1].zones[1], "4/8"
+    )
+
+
+async def test_favorite_management_services(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_russound_client: AsyncMock,
+) -> None:
+    """Test the Russound favorite-management services."""
+    await setup_integration(hass, mock_config_entry)
+    zone = mock_russound_client.controllers[1].zones[1]
+
+    await hass.services.async_call(
+        MP_DOMAIN,
+        SERVICE_RUSSOUND_SAVE_FAVORITE,
+        {
+            ATTR_ENTITY_ID: ENTITY_ID_ZONE_1,
+            ATTR_FAVORITE_ID: 2,
+            ATTR_FAVORITE_SCOPE: FAVORITE_SCOPE_ZONE,
+            ATTR_FAVORITE_NAME: "Kitchen radio",
+        },
+        blocking=True,
+    )
+    zone.save_zone_favorite.assert_awaited_once_with(2, "Kitchen radio")
+
+    await hass.services.async_call(
+        MP_DOMAIN,
+        SERVICE_RUSSOUND_RESTORE_FAVORITE,
+        {
+            ATTR_ENTITY_ID: ENTITY_ID_ZONE_1,
+            ATTR_FAVORITE_ID: 6,
+            ATTR_FAVORITE_SCOPE: FAVORITE_SCOPE_SYSTEM,
+        },
+        blocking=True,
+    )
+    zone.restore_system_favorite.assert_awaited_once_with(6)
+
+    await hass.services.async_call(
+        MP_DOMAIN,
+        SERVICE_RUSSOUND_DELETE_FAVORITE,
+        {
+            ATTR_ENTITY_ID: ENTITY_ID_ZONE_1,
+            ATTR_FAVORITE_ID: 1,
+            ATTR_FAVORITE_SCOPE: FAVORITE_SCOPE_ZONE,
+        },
+        blocking=True,
+    )
+    zone.delete_zone_favorite.assert_awaited_once_with(1)
+
+    await hass.services.async_call(
+        MP_DOMAIN,
+        SERVICE_RUSSOUND_RENAME_SYSTEM_FAVORITE,
+        {
+            ATTR_ENTITY_ID: ENTITY_ID_ZONE_1,
+            ATTR_FAVORITE_ID: 6,
+            ATTR_FAVORITE_NAME: "Evening mix",
+        },
+        blocking=True,
+    )
+    mock_russound_client.rename_system_favorite.assert_awaited_once_with(
+        6, "Evening mix"
     )
 
 

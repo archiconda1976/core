@@ -104,6 +104,12 @@ def mock_russound_client() -> Generator[AsyncMock]:
                 zone.set_turn_on_volume = AsyncMock()
                 zone.set_loudness = AsyncMock()
                 zone.restore_preset = AsyncMock()
+                zone.save_system_favorite = AsyncMock()
+                zone.save_zone_favorite = AsyncMock()
+                zone.restore_system_favorite = AsyncMock()
+                zone.restore_zone_favorite = AsyncMock()
+                zone.delete_system_favorite = AsyncMock()
+                zone.delete_zone_favorite = AsyncMock()
                 zone.set_party_mode = AsyncMock()
 
         client.controllers = {
@@ -129,6 +135,7 @@ def mock_russound_client() -> Generator[AsyncMock]:
         client.is_connected = Mock(return_value=True)
         client.register_state_update_callbacks = AsyncMock()
         client.unregister_state_update_callbacks = Mock(return_value=True)
+        client.rename_system_favorite = AsyncMock()
         client.rio_version = API_VERSION
 
         yield client
