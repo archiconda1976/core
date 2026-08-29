@@ -1,6 +1,6 @@
 """Tests for the Russound RIO media player."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from aiorussound.const import FeatureFlag
 from aiorussound.exceptions import CommandError
@@ -19,7 +19,10 @@ from homeassistant.components.media_player import (
     SERVICE_PLAY_MEDIA,
     SERVICE_SELECT_SOURCE,
 )
-from homeassistant.components.russound_rio.const import CONF_ZONE_SOURCE_EXCLUSION
+from homeassistant.components.russound_rio.const import (
+    CONF_ZONE_SOURCE_EXCLUSION,
+    RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT,
+)
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_MEDIA_SEEK,
@@ -325,6 +328,33 @@ async def test_play_media_preset_item_id(
             },
             blocking=True,
         )
+
+
+async def test_play_media_management_item(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_russound_client: AsyncMock,
+) -> None:
+    """Test playing a Media Management item."""
+    await setup_integration(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.russound_rio.media_browser.async_play_media_management"
+    ) as mock_play_media_management:
+        await hass.services.async_call(
+            MP_DOMAIN,
+            SERVICE_PLAY_MEDIA,
+            {
+                ATTR_ENTITY_ID: ENTITY_ID_ZONE_1,
+                ATTR_MEDIA_CONTENT_TYPE: RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT,
+                ATTR_MEDIA_CONTENT_ID: "4/8",
+            },
+            blocking=True,
+        )
+
+    mock_play_media_management.assert_awaited_once_with(
+        mock_russound_client.controllers[1].zones[1], "4/8"
+    )
 
 
 async def test_play_media_unknown_type(

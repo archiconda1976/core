@@ -26,6 +26,7 @@ from . import RussoundConfigEntry, media_browser
 from .const import (
     CONF_ZONE_SOURCE_EXCLUSION,
     DOMAIN,
+    RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT,
     RUSSOUND_MEDIA_TYPE_PRESET,
     SELECT_SOURCE_DELAY,
 )
@@ -279,6 +280,17 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         self, media_type: MediaType | str, media_id: str, **kwargs: Any
     ) -> None:
         """Play media on the Russound zone."""
+
+        if media_type == RUSSOUND_MEDIA_TYPE_MEDIA_MANAGEMENT:
+            try:
+                await media_browser.async_play_media_management(self._zone, media_id)
+            except ValueError as err:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_media_management_path",
+                    translation_placeholders={"media_id": media_id},
+                ) from err
+            return
 
         if media_type != RUSSOUND_MEDIA_TYPE_PRESET:
             raise HomeAssistantError(

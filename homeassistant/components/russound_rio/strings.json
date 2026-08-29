@@ -100,6 +100,9 @@
     "missing_preset": {
       "message": "The specified preset is not available for this source: {preset_id}"
     },
+    "invalid_media_management_path": {
+      "message": "Invalid Russound media browser item: {media_id}"
+    },
     "preset_non_integer": {
       "message": "Preset must be an integer, got: {preset_id}"
     },
