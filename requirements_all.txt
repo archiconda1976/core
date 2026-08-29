@@ -420,7 +420,8 @@ aioruckus==0.46.3
 
 # homeassistant.components.russound_rio
 # homeassistant.components.russound_rnet
-aiorussound==5.1.0
+# Development checkout: ../aiorussound declares the required 5.1.0 version.
+-e ../aiorussound
 
 # homeassistant.components.ruuvi_gateway
 aioruuvigateway==0.1.0
@@ -996,4 +997,3 @@ evohome-async==2.1.0
 
 # homeassistant.components.bryant_evolution
 evolutionhttp==0.0.19
-
