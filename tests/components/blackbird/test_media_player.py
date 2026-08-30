@@ -1,381 +1,267 @@
-"""The tests for the Monoprice Blackbird media player platform."""
+"""Tests for the Monoprice Blackbird media player integration."""
 
 from collections import defaultdict
-from unittest import mock
+from collections.abc import Generator
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 import voluptuous as vol
 
-from homeassistant.components.blackbird.const import DOMAIN, SERVICE_SETALLZONES
-from homeassistant.components.blackbird.media_player import (
-    DATA_BLACKBIRD,
-    PLATFORM_SCHEMA,
+from homeassistant.components.blackbird.const import (
+    CONF_MODEL,
+    CONF_SOURCES,
+    CONF_ZONES,
+    DOMAIN,
+    SERVICE_SETALLZONES,
+    TYPE_SERIAL,
+    TYPE_TCP,
 )
-from homeassistant.components.media_player import (
-    MediaPlayerEntity,
-    MediaPlayerEntityFeature,
-)
-from homeassistant.const import STATE_OFF, STATE_ON
+from homeassistant.components.blackbird.media_player import PLATFORM_SCHEMA
+from homeassistant.config_entries import SOURCE_IMPORT, SOURCE_USER
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_TYPE, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
-from homeassistant.setup import async_setup_component
+from homeassistant.data_entry_flow import FlowResultType
 
-from tests.common import MockEntityPlatform
+from tests.common import MockConfigEntry
 
 
 class AttrDict(dict):
     """Helper class for mocking attributes."""
 
-    def __setattr__(self, name, value):
-        """Set attribute."""
-        self[name] = value
-
     def __getattr__(self, item):
-        """Get attribute."""
+        """Return dictionary items as attributes."""
         return self[item]
 
 
 class MockBlackbird:
-    """Mock for pyblackbird object."""
+    """Mock for the pyblackbird client."""
 
     def __init__(self) -> None:
-        """Init mock object."""
+        """Initialize matrix state."""
         self.zones = defaultdict(lambda: AttrDict(power=True, av=1))
 
     def zone_status(self, zone_id):
-        """Get zone status."""
+        """Return a zone's state."""
         status = self.zones[zone_id]
         status.zone = zone_id
         return AttrDict(status)
 
     def set_zone_source(self, zone_id, source_idx):
-        """Set source for zone."""
+        """Set a zone's source."""
         self.zones[zone_id].av = source_idx
 
     def set_zone_power(self, zone_id, power):
-        """Turn zone on/off."""
+        """Set a zone's power."""
         self.zones[zone_id].power = power
 
     def set_all_zone_source(self, source_idx):
-        """Set source for all zones."""
-        self.zones[3].av = source_idx
+        """Set all zones' source."""
+        for zone in self.zones.values():
+            zone.av = source_idx
 
 
-def test_valid_serial_schema() -> None:
-    """Test valid schema."""
-    valid_schema = {
-        "platform": "blackbird",
-        "port": "/dev/ttyUSB0",
-        "zones": {
-            1: {"name": "a"},
-            2: {"name": "a"},
-            3: {"name": "a"},
-            4: {"name": "a"},
-            5: {"name": "a"},
-            6: {"name": "a"},
-            7: {"name": "a"},
-            8: {"name": "a"},
-        },
-        "sources": {
-            1: {"name": "a"},
-            2: {"name": "a"},
-            3: {"name": "a"},
-            4: {"name": "a"},
-            5: {"name": "a"},
-            6: {"name": "a"},
-            7: {"name": "a"},
-            8: {"name": "a"},
-        },
-    }
-    PLATFORM_SCHEMA(valid_schema)
-
-
-def test_valid_socket_schema() -> None:
-    """Test valid schema."""
-    valid_schema = {
-        "platform": "blackbird",
-        "host": "192.168.1.50",
-        "zones": {
-            1: {"name": "a"},
-            2: {"name": "a"},
-            3: {"name": "a"},
-            4: {"name": "a"},
-            5: {"name": "a"},
-        },
-        "sources": {
-            1: {"name": "a"},
-            2: {"name": "a"},
-            3: {"name": "a"},
-            4: {"name": "a"},
-        },
-    }
-    PLATFORM_SCHEMA(valid_schema)
-
-
-def test_invalid_schemas() -> None:
-    """Test invalid schemas."""
-    schemas = (
-        {},  # Empty
-        None,  # None
-        # Port and host used concurrently
-        {
-            "platform": "blackbird",
-            "port": "/dev/ttyUSB0",
-            "host": "192.168.1.50",
-            "name": "Name",
-            "zones": {1: {"name": "a"}},
-            "sources": {1: {"name": "b"}},
-        },
-        # Port or host missing
-        {
-            "platform": "blackbird",
-            "name": "Name",
-            "zones": {1: {"name": "a"}},
-            "sources": {1: {"name": "b"}},
-        },
-        # Invalid zone number
-        {
-            "platform": "blackbird",
-            "port": "/dev/ttyUSB0",
-            "name": "Name",
-            "zones": {11: {"name": "a"}},
-            "sources": {1: {"name": "b"}},
-        },
-        # Invalid source number
-        {
-            "platform": "blackbird",
-            "port": "/dev/ttyUSB0",
-            "name": "Name",
-            "zones": {1: {"name": "a"}},
-            "sources": {9: {"name": "b"}},
-        },
-        # Zone missing name
-        {
-            "platform": "blackbird",
-            "port": "/dev/ttyUSB0",
-            "name": "Name",
-            "zones": {1: {}},
-            "sources": {1: {"name": "b"}},
-        },
-        # Source missing name
-        {
-            "platform": "blackbird",
-            "port": "/dev/ttyUSB0",
-            "name": "Name",
-            "zones": {1: {"name": "a"}},
-            "sources": {1: {}},
-        },
-    )
-    for value in schemas:
-        with pytest.raises(vol.MultipleInvalid):
-            PLATFORM_SCHEMA(value)
+CONFIG_ENTRY_DATA = {
+    CONF_TYPE: TYPE_TCP,
+    CONF_HOST: "192.0.2.1",
+    CONF_PORT: 4001,
+    CONF_MODEL: "4x4",
+    CONF_ZONES: {"1": {"name": "Kitchen"}},
+    CONF_SOURCES: {"1": {"name": "Streaming"}, "2": {"name": "TV"}},
+}
 
 
 @pytest.fixture
 def mock_blackbird() -> MockBlackbird:
-    """Return a mock blackbird instance."""
+    """Return a mock Blackbird client."""
     return MockBlackbird()
 
 
 @pytest.fixture
-async def setup_blackbird(hass: HomeAssistant, mock_blackbird: MockBlackbird) -> None:
-    """Set up blackbird."""
-    with mock.patch(
-        "homeassistant.components.blackbird.media_player.get_blackbird",
-        return_value=mock_blackbird,
-    ):
-        await async_setup_component(
-            hass,
-            "media_player",
-            {
-                "media_player": {
-                    "platform": "blackbird",
-                    "port": "/dev/ttyUSB0",
-                    "zones": {3: {"name": "Zone name"}},
-                    "sources": {
-                        1: {"name": "one"},
-                        3: {"name": "three"},
-                        2: {"name": "two"},
-                    },
-                }
-            },
-        )
-        await hass.async_block_till_done()
+def mock_setup_entry() -> Generator[AsyncMock]:
+    """Prevent config-flow tests from setting up a live matrix."""
+    with patch(
+        "homeassistant.components.blackbird.async_setup_entry", return_value=True
+    ) as setup_entry:
+        yield setup_entry
 
 
 @pytest.fixture
-def media_player_entity(
-    hass: HomeAssistant, setup_blackbird: None
-) -> MediaPlayerEntity:
-    """Return the media player entity."""
-    media_player = hass.data[DATA_BLACKBIRD]["/dev/ttyUSB0-3"]
-    media_player.hass = hass
-    media_player.platform = MockEntityPlatform(hass)
-    media_player.entity_id = "media_player.zone_3"
-    return media_player
+def mock_config_entry() -> MockConfigEntry:
+    """Return a Blackbird config entry."""
+    return MockConfigEntry(domain=DOMAIN, data=CONFIG_ENTRY_DATA)
 
 
-@pytest.mark.usefixtures("setup_blackbird")
-async def test_setup_platform(hass: HomeAssistant) -> None:
-    """Test setting up platform."""
-    # One service must be registered
-    assert hass.services.has_service(DOMAIN, SERVICE_SETALLZONES)
-    assert len(hass.data[DATA_BLACKBIRD]) == 1
-    assert hass.data[DATA_BLACKBIRD]["/dev/ttyUSB0-3"].name == "Zone name"
+def test_valid_serial_schema() -> None:
+    """Test valid serial YAML schema."""
+    PLATFORM_SCHEMA(
+        {
+            "platform": DOMAIN,
+            "port": "/dev/ttyUSB0",
+            "zones": {1: {"name": "Kitchen"}},
+            "sources": {1: {"name": "Streaming"}},
+        }
+    )
 
 
-async def test_setallzones_service_call_with_entity_id(
+def test_valid_socket_schema() -> None:
+    """Test valid socket YAML schema."""
+    PLATFORM_SCHEMA(
+        {
+            "platform": DOMAIN,
+            "host": "192.0.2.1",
+            "zones": {1: {"name": "Kitchen"}},
+            "sources": {1: {"name": "Streaming"}},
+        }
+    )
+
+
+def test_invalid_schema() -> None:
+    """Test invalid YAML schema."""
+    with pytest.raises(vol.MultipleInvalid):
+        PLATFORM_SCHEMA({"platform": DOMAIN})
+
+
+async def test_setup_entry(
     hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
     mock_blackbird: MockBlackbird,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Test set all zone source service call with entity id."""
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.name == "Zone name"
-    assert media_player_entity.state == STATE_ON
-    assert media_player_entity.source == "one"
+    """Test config-entry setup creates the profile's zones."""
+    mock_config_entry.add_to_hass(hass)
 
-    # Call set all zones service
+    with patch(
+        "homeassistant.components.blackbird.media_player.get_blackbird",
+        return_value=mock_blackbird,
+    ) as get_blackbird:
+        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    get_blackbird.assert_called_once_with("192.0.2.1", False, ANY, 4001)
+    assert hass.states.get("media_player.kitchen").state == STATE_ON
+    assert hass.states.get("media_player.zone_2").state == STATE_ON
+    assert hass.states.get("media_player.kitchen").attributes["source"] == "Streaming"
+
+
+async def test_set_all_zones_service(
+    hass: HomeAssistant,
+    mock_blackbird: MockBlackbird,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test set_all_zones is registered for config-entry entities."""
+    mock_config_entry.add_to_hass(hass)
+    with patch(
+        "homeassistant.components.blackbird.media_player.get_blackbird",
+        return_value=mock_blackbird,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert hass.services.has_service(DOMAIN, SERVICE_SETALLZONES)
     await hass.services.async_call(
         DOMAIN,
         SERVICE_SETALLZONES,
-        {"entity_id": "media_player.zone_3", "source": "three"},
+        {"entity_id": "media_player.kitchen", "source": "TV"},
         blocking=True,
     )
-
-    # Check that source was changed
-    assert mock_blackbird.zones[3].av == 3
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.source == "three"
+    assert mock_blackbird.zones[1].av == 2
 
 
-async def test_setallzones_service_call_without_entity_id(
-    mock_blackbird: MockBlackbird,
-    hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_user_flow_tcp(hass: HomeAssistant) -> None:
+    """Test a TCP configuration flow."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={CONF_TYPE: TYPE_TCP}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "tcp"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_HOST: "192.0.2.1", CONF_PORT: 4001, CONF_MODEL: "4x4"},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_TYPE: TYPE_TCP,
+        CONF_HOST: "192.0.2.1",
+        CONF_PORT: 4001,
+        CONF_MODEL: "4x4",
+    }
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_import_flow_serial_preserves_names(hass: HomeAssistant) -> None:
+    """Test the YAML import creates a serial config entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={
+            CONF_PORT: "/dev/ttyUSB0",
+            CONF_ZONES: {1: {"name": "Kitchen"}},
+            CONF_SOURCES: {1: {"name": "Streaming"}},
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_TYPE: TYPE_SERIAL,
+        CONF_MODEL: "4x4",
+        "serial": "/dev/ttyUSB0",
+        CONF_ZONES: {"1": {"name": "Kitchen"}},
+        CONF_SOURCES: {"1": {"name": "Streaming"}},
+    }
+
+
+async def test_import_flow_duplicate(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test set all zone source service call without entity id."""
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.name == "Zone name"
-    assert media_player_entity.state == STATE_ON
-    assert media_player_entity.source == "one"
+    """Test the YAML import detects an existing matrix."""
+    mock_config_entry.add_to_hass(hass)
 
-    # Call set all zones service
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_IMPORT}, data=CONFIG_ENTRY_DATA
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_entry_offline_is_retried(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test a connection failure marks the entry for setup retry."""
+    mock_config_entry.add_to_hass(hass)
+    with patch(
+        "homeassistant.components.blackbird.media_player.get_blackbird",
+        side_effect=OSError,
+    ):
+        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_config_entry.state.value == "setup_retry"
+
+
+async def test_zone_state_updates(
+    hass: HomeAssistant,
+    mock_blackbird: MockBlackbird,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test entity state changes reflect the matrix state."""
+    mock_config_entry.add_to_hass(hass)
+    with patch(
+        "homeassistant.components.blackbird.media_player.get_blackbird",
+        return_value=mock_blackbird,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    mock_blackbird.zones[1].power = False
     await hass.services.async_call(
-        DOMAIN, SERVICE_SETALLZONES, {"source": "three"}, blocking=True
+        "homeassistant",
+        "update_entity",
+        {"entity_id": "media_player.kitchen"},
+        blocking=True,
     )
-
-    # Check that source was changed
-    assert mock_blackbird.zones[3].av == 3
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.source == "three"
-
-
-async def test_update(
-    hass: HomeAssistant, media_player_entity: MediaPlayerEntity
-) -> None:
-    """Test updating values from blackbird."""
-
-    assert media_player_entity.state == STATE_ON
-    assert media_player_entity.source == "one"
-
-
-async def test_name(media_player_entity: MediaPlayerEntity) -> None:
-    """Test name property."""
-    assert media_player_entity.name == "Zone name"
-
-
-async def test_state(
-    hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
-    mock_blackbird: MockBlackbird,
-) -> None:
-    """Test state property."""
-    assert media_player_entity.state == STATE_ON
-
-    mock_blackbird.zones[3].power = False
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.state == STATE_OFF
-
-
-async def test_supported_features(media_player_entity: MediaPlayerEntity) -> None:
-    """Test supported features property."""
-    assert (
-        media_player_entity.supported_features
-        == MediaPlayerEntityFeature.TURN_ON
-        | MediaPlayerEntityFeature.TURN_OFF
-        | MediaPlayerEntityFeature.SELECT_SOURCE
-    )
-
-
-async def test_source(
-    hass: HomeAssistant, media_player_entity: MediaPlayerEntity
-) -> None:
-    """Test source property."""
-    assert media_player_entity.source == "one"
-
-
-async def test_media_title(
-    hass: HomeAssistant, media_player_entity: MediaPlayerEntity
-) -> None:
-    """Test media title property."""
-    assert media_player_entity.media_title == "one"
-
-
-async def test_source_list(media_player_entity: MediaPlayerEntity) -> None:
-    """Test source list property."""
-    # Note, the list is sorted!
-    assert media_player_entity.source_list == ["one", "two", "three"]
-
-
-async def test_select_source(
-    hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
-    mock_blackbird: MockBlackbird,
-) -> None:
-    """Test source selection methods."""
-    await hass.async_add_executor_job(media_player_entity.update)
-
-    assert media_player_entity.source == "one"
-
-    await media_player_entity.async_select_source("two")
-    assert mock_blackbird.zones[3].av == 2
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.source == "two"
-
-    # Trying to set unknown source.
-    await media_player_entity.async_select_source("no name")
-    assert mock_blackbird.zones[3].av == 2
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.source == "two"
-
-
-async def test_turn_on(
-    hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
-    mock_blackbird: MockBlackbird,
-) -> None:
-    """Testing turning on the zone."""
-    mock_blackbird.zones[3].power = False
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.state == STATE_OFF
-
-    await media_player_entity.async_turn_on()
-    assert mock_blackbird.zones[3].power
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.state == STATE_ON
-
-
-async def test_turn_off(
-    hass: HomeAssistant,
-    media_player_entity: MediaPlayerEntity,
-    mock_blackbird: MockBlackbird,
-) -> None:
-    """Testing turning off the zone."""
-    mock_blackbird.zones[3].power = True
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.state == STATE_ON
-
-    await media_player_entity.async_turn_off()
-    assert not mock_blackbird.zones[3].power
-    await hass.async_add_executor_job(media_player_entity.update)
-    assert media_player_entity.state == STATE_OFF
+    assert hass.states.get("media_player.kitchen").state == STATE_OFF

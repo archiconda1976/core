@@ -4,6 +4,7 @@ import logging
 from typing import override
 
 from pyblackbird import get_blackbird
+from pyblackbird.profiles import BLACKBIRD_4X4, BLACKBIRD_8X8
 from serial import SerialException
 import voluptuous as vol
 
@@ -13,45 +14,97 @@ from homeassistant.components.media_player import (
     MediaPlayerEntityFeature,
     MediaPlayerState,
 )
-from homeassistant.const import (
-    ATTR_ENTITY_ID,
-    CONF_HOST,
-    CONF_NAME,
-    CONF_PORT,
-    CONF_TYPE,
-)
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TYPE
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+    async_get_current_platform,
+)
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import DOMAIN, SERVICE_SETALLZONES
+from .const import (
+    CONF_MODEL,
+    CONF_SERIAL,
+    CONF_SOURCES,
+    CONF_ZONES,
+    DOMAIN,
+    SERVICE_SETALLZONES,
+    TYPE_SERIAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-MEDIA_PLAYER_SCHEMA = vol.Schema({ATTR_ENTITY_ID: cv.comp_entity_ids})
 
 ZONE_SCHEMA = vol.Schema({vol.Required(CONF_NAME): cv.string})
 
 SOURCE_SCHEMA = vol.Schema({vol.Required(CONF_NAME): cv.string})
 
-CONF_ZONES = "zones"
-CONF_SOURCES = "sources"
-
-DATA_BLACKBIRD = "blackbird"
-
 ATTR_SOURCE = "source"
-
-BLACKBIRD_SETALLZONES_SCHEMA = MEDIA_PLAYER_SCHEMA.extend(
-    {vol.Required(ATTR_SOURCE): cv.string}
-)
-
 
 # Valid zone ids: 1-8
 ZONE_IDS = vol.All(vol.Coerce(int), vol.Range(min=1, max=8))
 
 # Valid source ids: 1-8
 SOURCE_IDS = vol.All(vol.Coerce(int), vol.Range(min=1, max=8))
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up Blackbird zones from a config entry."""
+    data = entry.data
+    profile = BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
+    use_serial = data[CONF_TYPE] == TYPE_SERIAL
+    address = data[CONF_SERIAL] if use_serial else data[CONF_HOST]
+    try:
+        blackbird = await hass.async_add_executor_job(
+            get_blackbird,
+            address,
+            use_serial,
+            profile,
+            data.get(CONF_PORT, 4001),
+        )
+    except (OSError, SerialException, TimeoutError) as err:
+        raise ConfigEntryNotReady from err
+
+    sources = {
+        source_id: _item_name(
+            data.get(CONF_SOURCES, {}), source_id, f"Input {source_id}"
+        )
+        for source_id in range(1, profile.sources + 1)
+    }
+    async_add_entities(
+        [
+            BlackbirdZone(
+                blackbird,
+                sources,
+                zone_id,
+                _item_name(data.get(CONF_ZONES, {}), zone_id, f"Zone {zone_id}"),
+                f"{entry.entry_id}-{zone_id}",
+            )
+            for zone_id in range(1, profile.zones + 1)
+        ],
+        update_before_add=True,
+    )
+
+    platform = async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_SETALLZONES,
+        {vol.Required(ATTR_SOURCE): cv.string},
+        "set_all_zones",
+    )
+
+
+def _item_name(items: dict[str, dict[str, str]], item_id: int, default: str) -> str:
+    """Return a named item from config-entry or unconverted YAML data."""
+    return items.get(str(item_id), items.get(item_id, {})).get(CONF_NAME, default)
+
 
 PLATFORM_SCHEMA = vol.All(
     cv.has_at_least_one_key(CONF_PORT, CONF_HOST),
@@ -66,71 +119,23 @@ PLATFORM_SCHEMA = vol.All(
 )
 
 
-def setup_platform(
+async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    add_entities: AddEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up the Monoprice Blackbird 4k 8x8 HDBaseT Matrix platform."""
-    if DATA_BLACKBIRD not in hass.data:
-        hass.data[DATA_BLACKBIRD] = {}
-
-    port = config.get(CONF_PORT)
-    host = config.get(CONF_HOST)
-
-    connection = None
-    if port is not None:
-        try:
-            blackbird = get_blackbird(port)
-            connection = port
-        except SerialException:
-            _LOGGER.error("Error connecting to the Blackbird controller")
-            return
-
-    if host is not None:
-        try:
-            blackbird = get_blackbird(host, False)
-            connection = host
-        except TimeoutError:
-            _LOGGER.error("Error connecting to the Blackbird controller")
-            return
-
-    sources = {
-        source_id: extra[CONF_NAME] for source_id, extra in config[CONF_SOURCES].items()
-    }
-
-    devices = []
-    for zone_id, extra in config[CONF_ZONES].items():
-        _LOGGER.debug("Adding zone %d - %s", zone_id, extra[CONF_NAME])
-        unique_id = f"{connection}-{zone_id}"
-        device = BlackbirdZone(blackbird, sources, zone_id, extra[CONF_NAME])
-        hass.data[DATA_BLACKBIRD][unique_id] = device
-        devices.append(device)
-
-    add_entities(devices, True)
-
-    def service_handle(service: ServiceCall) -> None:
-        """Handle for services."""
-        entity_ids = service.data.get(ATTR_ENTITY_ID)
-        source = service.data.get(ATTR_SOURCE)
-        if entity_ids:
-            devices = [
-                device
-                for device in hass.data[DATA_BLACKBIRD].values()
-                if device.entity_id in entity_ids
-            ]
-
-        else:
-            devices = hass.data[DATA_BLACKBIRD].values()
-
-        for device in devices:
-            if service.service == SERVICE_SETALLZONES:
-                device.set_all_zones(source)
-
-    hass.services.register(
-        DOMAIN, SERVICE_SETALLZONES, service_handle, schema=BLACKBIRD_SETALLZONES_SCHEMA
+    """Import the legacy YAML platform into a config entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_IMPORT}, data=config
     )
+    if (
+        result.get("type") is FlowResultType.ABORT
+        and result.get("reason") != "already_configured"
+    ):
+        _LOGGER.error(
+            "Unable to import Blackbird YAML configuration: %s", result.get("reason")
+        )
 
 
 class BlackbirdZone(MediaPlayerEntity):
@@ -142,7 +147,7 @@ class BlackbirdZone(MediaPlayerEntity):
         | MediaPlayerEntityFeature.SELECT_SOURCE
     )
 
-    def __init__(self, blackbird, sources, zone_id, zone_name):
+    def __init__(self, blackbird, sources, zone_id, zone_name, unique_id):
         """Initialize new zone."""
         self._blackbird = blackbird
         # dict source_id -> source name
@@ -155,6 +160,7 @@ class BlackbirdZone(MediaPlayerEntity):
         )
         self._zone_id = zone_id
         self._attr_name = zone_name
+        self._attr_unique_id = unique_id
 
     def update(self) -> None:
         """Retrieve latest state."""
