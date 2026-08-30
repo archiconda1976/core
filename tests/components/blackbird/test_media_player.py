@@ -14,6 +14,7 @@ from homeassistant.components.blackbird.const import (
     DOMAIN,
     MODEL_4X4,
     MODEL_4X4_LEGACY,
+    MODEL_8X8,
     SERVICE_SETALLZONES,
     TYPE_SERIAL,
     TYPE_TCP,
@@ -226,7 +227,7 @@ async def test_import_flow_serial_preserves_names(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
         CONF_TYPE: TYPE_SERIAL,
-        CONF_MODEL: MODEL_4X4,
+        CONF_MODEL: MODEL_8X8,
         "serial": "/dev/ttyUSB0",
         CONF_ZONES: {"1": {"name": "Kitchen"}},
         CONF_SOURCES: {"1": {"name": "Streaming"}},
@@ -245,6 +246,32 @@ async def test_import_flow_duplicate(
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_import_flow_defaults_to_8x8_without_legacy_type(
+    hass: HomeAssistant,
+) -> None:
+    """Test YAML without type preserves the original 8x8 default."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={
+            CONF_HOST: "192.0.2.1",
+            CONF_ZONES: {1: {"name": "Kitchen"}},
+            CONF_SOURCES: {1: {"name": "Streaming"}},
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_TYPE: TYPE_TCP,
+        CONF_MODEL: MODEL_8X8,
+        CONF_HOST: "192.0.2.1",
+        CONF_PORT: 4001,
+        CONF_ZONES: {"1": {"name": "Kitchen"}},
+        CONF_SOURCES: {"1": {"name": "Streaming"}},
+    }
 
 
 @pytest.mark.usefixtures("mock_setup_entry")
