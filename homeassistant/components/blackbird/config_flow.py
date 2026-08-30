@@ -100,7 +100,7 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
                 {CONF_TYPE: TYPE_SERIAL, CONF_SERIAL: user_input[CONF_SERIAL]}
             )
             return self.async_create_entry(
-                title=f"Monoprice Blackbird {user_input[CONF_MODEL]}",
+                title=f"Monoprice Blackbird {MODELS[user_input[CONF_MODEL]]}",
                 data={CONF_TYPE: TYPE_SERIAL, **user_input},
             )
 
