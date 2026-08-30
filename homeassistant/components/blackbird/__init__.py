@@ -7,9 +7,10 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from pyblackbird import get_blackbird
 from pyblackbird.profiles import BLACKBIRD_4X4, BLACKBIRD_8X8
+from pyblackbird.profiles import BLACKBIRD_4X4_LEGACY
 from serial import SerialException
 
-from .const import CONF_MODEL, CONF_SERIAL, TYPE_SERIAL
+from .const import CONF_MODEL, CONF_SERIAL, MODEL_4X4_LEGACY, TYPE_SERIAL
 
 PLATFORMS = [Platform.MEDIA_PLAYER]
 
@@ -17,7 +18,11 @@ PLATFORMS = [Platform.MEDIA_PLAYER]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Blackbird from a config entry."""
     data = entry.data
-    profile = BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
+    profile = (
+        BLACKBIRD_4X4_LEGACY
+        if data[CONF_MODEL] == MODEL_4X4_LEGACY
+        else BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
+    )
     use_serial = data["type"] == TYPE_SERIAL
     address = data[CONF_SERIAL] if use_serial else data["host"]
     try:
