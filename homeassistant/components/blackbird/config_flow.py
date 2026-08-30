@@ -13,11 +13,24 @@ from .const import (
     CONF_SOURCES,
     CONF_ZONES,
     DOMAIN,
+    MODEL_4X4,
+    MODEL_4X4_LEGACY,
+    MODEL_8X8,
     TYPE_SERIAL,
     TYPE_TCP,
 )
 
-MODELS = ("4x4", "8x8")
+MODELS = {
+    MODEL_4X4_LEGACY: "4x4 legacy (PID 15779)",
+    MODEL_4X4: "4x4",
+    MODEL_8X8: "8x8",
+}
+
+MODEL_DEFAULT_PORTS = {
+    MODEL_4X4_LEGACY: 23,
+    MODEL_4X4: 4001,
+    MODEL_8X8: 4001,
+}
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {vol.Required(CONF_TYPE, default=TYPE_TCP): vol.In((TYPE_TCP, TYPE_SERIAL))}
@@ -26,7 +39,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 STEP_TCP_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_PORT, default=4001): int,
+        vol.Optional(CONF_PORT): int,
         vol.Required(CONF_MODEL, default="8x8"): vol.In(MODELS),
     }
 )
@@ -61,16 +74,19 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Configure a TCP-connected matrix."""
         if user_input is not None:
+            port = user_input.get(
+                CONF_PORT, MODEL_DEFAULT_PORTS[user_input[CONF_MODEL]]
+            )
             self._async_abort_entries_match(
                 {
                     CONF_TYPE: TYPE_TCP,
                     CONF_HOST: user_input[CONF_HOST],
-                    CONF_PORT: user_input[CONF_PORT],
+                    CONF_PORT: port,
                 }
             )
             return self.async_create_entry(
-                title=f"Monoprice Blackbird {user_input[CONF_MODEL]}",
-                data={CONF_TYPE: TYPE_TCP, **user_input},
+                title=f"Monoprice Blackbird {MODELS[user_input[CONF_MODEL]]}",
+                data={CONF_TYPE: TYPE_TCP, **user_input, CONF_PORT: port},
             )
 
         return self.async_show_form(step_id="tcp", data_schema=STEP_TCP_DATA_SCHEMA)
@@ -102,9 +118,14 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
             (int(item_id) for item_id in (*zones, *sources)),
             default=1,
         )
-        model = "4x4" if highest_id <= 4 else "8x8"
+        legacy_type = import_config.get(CONF_TYPE) == 1
+        model = (
+            MODEL_4X4_LEGACY
+            if legacy_type
+            else MODEL_4X4 if highest_id <= 4 else MODEL_8X8
+        )
 
-        if CONF_PORT in import_config:
+        if CONF_HOST not in import_config:
             data = {
                 CONF_TYPE: TYPE_SERIAL,
                 CONF_MODEL: model,
@@ -120,7 +141,7 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_TYPE: TYPE_TCP,
                 CONF_MODEL: model,
                 CONF_HOST: import_config[CONF_HOST],
-                CONF_PORT: import_config.get(CONF_PORT, 4001),
+                CONF_PORT: MODEL_DEFAULT_PORTS[model],
                 CONF_ZONES: zones,
                 CONF_SOURCES: sources,
             }
@@ -132,7 +153,9 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             )
 
-        return self.async_create_entry(title=f"Monoprice Blackbird {model}", data=data)
+        return self.async_create_entry(
+            title=f"Monoprice Blackbird {MODELS[model]}", data=data
+        )
 
 
 def _serialize_named_items(
