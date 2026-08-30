@@ -2,9 +2,10 @@
   "domain": "blackbird",
   "name": "Monoprice Blackbird Matrix Switch",
   "codeowners": [],
+  "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/blackbird",
   "iot_class": "local_polling",
   "loggers": ["pyblackbird"],
   "quality_scale": "legacy",
-  "requirements": ["pyblackbird==0.6"]
+  "requirements": ["pyblackbird==0.7"]
 }

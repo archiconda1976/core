@@ -1,4 +1,14 @@
 {
+  "config": {
+    "abort": {
+      "already_configured": "This Blackbird matrix is already configured."
+    },
+    "step": {
+      "user": {"data": {"type": "Connection type"}},
+      "tcp": {"data": {"host": "Host", "port": "Port", "model": "Matrix model"}},
+      "serial": {"data": {"serial": "Serial device", "model": "Matrix model"}}
+    }
+  },
   "services": {
     "set_all_zones": {
       "description": "Sets all Blackbird zones to a single source.",
