@@ -4,6 +4,7 @@ import logging
 from typing import override
 
 from pyblackbird.profiles import BLACKBIRD_4X4, BLACKBIRD_8X8
+from pyblackbird.profiles import BLACKBIRD_4X4_LEGACY
 import voluptuous as vol
 
 from homeassistant.components.media_player import (
@@ -29,6 +30,7 @@ from .const import (
     CONF_SOURCES,
     CONF_ZONES,
     DOMAIN,
+    MODEL_4X4_LEGACY,
     SERVICE_SETALLZONES,
 )
 
@@ -54,7 +56,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up Blackbird zones from a config entry."""
     data = entry.data
-    profile = BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
+    profile = (
+        BLACKBIRD_4X4_LEGACY
+        if data[CONF_MODEL] == MODEL_4X4_LEGACY
+        else BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
+    )
     blackbird = entry.runtime_data
 
     sources = {
@@ -94,8 +100,9 @@ PLATFORM_SCHEMA = vol.All(
     cv.has_at_least_one_key(CONF_PORT, CONF_HOST),
     MEDIA_PLAYER_PLATFORM_SCHEMA.extend(
         {
-            vol.Exclusive(CONF_PORT, CONF_TYPE): cv.string,
-            vol.Exclusive(CONF_HOST, CONF_TYPE): cv.string,
+            vol.Exclusive(CONF_PORT, "connection"): cv.string,
+            vol.Exclusive(CONF_HOST, "connection"): cv.string,
+            vol.Optional(CONF_TYPE): vol.In((0, 1)),
             vol.Required(CONF_ZONES): vol.Schema({ZONE_IDS: ZONE_SCHEMA}),
             vol.Required(CONF_SOURCES): vol.Schema({SOURCE_IDS: SOURCE_SCHEMA}),
         }
