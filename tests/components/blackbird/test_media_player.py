@@ -12,6 +12,8 @@ from homeassistant.components.blackbird.const import (
     CONF_SOURCES,
     CONF_ZONES,
     DOMAIN,
+    MODEL_4X4,
+    MODEL_4X4_LEGACY,
     SERVICE_SETALLZONES,
     TYPE_SERIAL,
     TYPE_TCP,
@@ -64,7 +66,7 @@ CONFIG_ENTRY_DATA = {
     CONF_TYPE: TYPE_TCP,
     CONF_HOST: "192.0.2.1",
     CONF_PORT: 4001,
-    CONF_MODEL: "4x4",
+    CONF_MODEL: MODEL_4X4,
     CONF_ZONES: {"1": {"name": "Kitchen"}},
     CONF_SOURCES: {"1": {"name": "Streaming"}, "2": {"name": "TV"}},
 }
@@ -115,6 +117,19 @@ def test_valid_socket_schema() -> None:
     )
 
 
+def test_valid_legacy_socket_schema() -> None:
+    """Test valid legacy 4x4 socket YAML schema."""
+    PLATFORM_SCHEMA(
+        {
+            "platform": DOMAIN,
+            "host": "192.0.2.1",
+            "type": 1,
+            "zones": {1: {"name": "Kitchen"}},
+            "sources": {1: {"name": "Streaming"}},
+        }
+    )
+
+
 def test_invalid_schema() -> None:
     """Test invalid YAML schema."""
     with pytest.raises(vol.MultipleInvalid):
@@ -130,7 +145,7 @@ async def test_setup_entry(
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.blackbird.media_player.get_blackbird",
+        "homeassistant.components.blackbird.get_blackbird",
         return_value=mock_blackbird,
     ) as get_blackbird:
         assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -150,7 +165,7 @@ async def test_set_all_zones_service(
     """Test set_all_zones is registered for config-entry entities."""
     mock_config_entry.add_to_hass(hass)
     with patch(
-        "homeassistant.components.blackbird.media_player.get_blackbird",
+        "homeassistant.components.blackbird.get_blackbird",
         return_value=mock_blackbird,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -180,14 +195,18 @@ async def test_user_flow_tcp(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        user_input={CONF_HOST: "192.0.2.1", CONF_PORT: 4001, CONF_MODEL: "4x4"},
+        user_input={
+            CONF_HOST: "192.0.2.1",
+            CONF_PORT: 4001,
+            CONF_MODEL: MODEL_4X4,
+        },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
         CONF_TYPE: TYPE_TCP,
         CONF_HOST: "192.0.2.1",
         CONF_PORT: 4001,
-        CONF_MODEL: "4x4",
+        CONF_MODEL: MODEL_4X4,
     }
 
 
@@ -207,7 +226,7 @@ async def test_import_flow_serial_preserves_names(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
         CONF_TYPE: TYPE_SERIAL,
-        CONF_MODEL: "4x4",
+        CONF_MODEL: MODEL_4X4,
         "serial": "/dev/ttyUSB0",
         CONF_ZONES: {"1": {"name": "Kitchen"}},
         CONF_SOURCES: {"1": {"name": "Streaming"}},
@@ -228,13 +247,40 @@ async def test_import_flow_duplicate(
     assert result["reason"] == "already_configured"
 
 
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_import_flow_legacy_4x4_uses_legacy_tcp_port(
+    hass: HomeAssistant,
+) -> None:
+    """Test legacy YAML type 1 selects the PID 15779 transport."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={
+            CONF_HOST: "192.0.2.1",
+            CONF_TYPE: 1,
+            CONF_ZONES: {1: {"name": "Kitchen"}},
+            CONF_SOURCES: {1: {"name": "Streaming"}},
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_TYPE: TYPE_TCP,
+        CONF_MODEL: MODEL_4X4_LEGACY,
+        CONF_HOST: "192.0.2.1",
+        CONF_PORT: 23,
+        CONF_ZONES: {"1": {"name": "Kitchen"}},
+        CONF_SOURCES: {"1": {"name": "Streaming"}},
+    }
+
+
 async def test_entry_offline_is_retried(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Test a connection failure marks the entry for setup retry."""
     mock_config_entry.add_to_hass(hass)
     with patch(
-        "homeassistant.components.blackbird.media_player.get_blackbird",
+        "homeassistant.components.blackbird.get_blackbird",
         side_effect=OSError,
     ):
         assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -251,7 +297,7 @@ async def test_zone_state_updates(
     """Test entity state changes reflect the matrix state."""
     mock_config_entry.add_to_hass(hass)
     with patch(
-        "homeassistant.components.blackbird.media_player.get_blackbird",
+        "homeassistant.components.blackbird.get_blackbird",
         return_value=mock_blackbird,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
