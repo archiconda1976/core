@@ -3,9 +3,7 @@
 import logging
 from typing import override
 
-from pyblackbird import get_blackbird
 from pyblackbird.profiles import BLACKBIRD_4X4, BLACKBIRD_8X8
-from serial import SerialException
 import voluptuous as vol
 
 from homeassistant.components.media_player import (
@@ -18,7 +16,6 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TYPE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import (
     AddConfigEntryEntitiesCallback,
@@ -29,12 +26,10 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
     CONF_MODEL,
-    CONF_SERIAL,
     CONF_SOURCES,
     CONF_ZONES,
     DOMAIN,
     SERVICE_SETALLZONES,
-    TYPE_SERIAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,18 +55,7 @@ async def async_setup_entry(
     """Set up Blackbird zones from a config entry."""
     data = entry.data
     profile = BLACKBIRD_4X4 if data[CONF_MODEL] == "4x4" else BLACKBIRD_8X8
-    use_serial = data[CONF_TYPE] == TYPE_SERIAL
-    address = data[CONF_SERIAL] if use_serial else data[CONF_HOST]
-    try:
-        blackbird = await hass.async_add_executor_job(
-            get_blackbird,
-            address,
-            use_serial,
-            profile,
-            data.get(CONF_PORT, 4001),
-        )
-    except (OSError, SerialException, TimeoutError) as err:
-        raise ConfigEntryNotReady from err
+    blackbird = entry.runtime_data
 
     sources = {
         source_id: _item_name(
