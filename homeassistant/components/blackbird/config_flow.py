@@ -114,16 +114,8 @@ class BlackbirdConfigFlow(ConfigFlow, domain=DOMAIN):
         """Import the legacy YAML configuration."""
         zones = _serialize_named_items(import_config.get(CONF_ZONES, {}))
         sources = _serialize_named_items(import_config.get(CONF_SOURCES, {}))
-        highest_id = max(
-            (int(item_id) for item_id in (*zones, *sources)),
-            default=1,
-        )
         legacy_type = import_config.get(CONF_TYPE) == 1
-        model = (
-            MODEL_4X4_LEGACY
-            if legacy_type
-            else MODEL_4X4 if highest_id <= 4 else MODEL_8X8
-        )
+        model = MODEL_4X4_LEGACY if legacy_type else MODEL_8X8
 
         if CONF_HOST not in import_config:
             data = {
