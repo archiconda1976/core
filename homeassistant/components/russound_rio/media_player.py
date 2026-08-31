@@ -140,6 +140,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.NEXT_TRACK
         | MediaPlayerEntityFeature.PREVIOUS_TRACK
     )
+    _attr_supported_features = _BASE_SUPPORTED_FEATURES
     _attr_name = None
 
     def __init__(
