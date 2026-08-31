@@ -223,7 +223,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @property
     @override
     def media_album_name(self) -> str | None:
-        """Album name of current playing media."""
+        """Album name of current playing media, music track only."""
         return self._source.album_name
 
     @property
@@ -253,7 +253,11 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @property
     @override
     def volume_level(self) -> float:
-        """Return the volume level."""
+        """Volume level of the media player (0..1).
+
+        Value is returned based on a range (0..50).
+        Therefore float divide by 50 to get to the required range.
+        """
         return self._zone.volume / 50.0
 
     @property
@@ -306,7 +310,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @command
     @override
     async def async_mute_volume(self, mute: bool) -> None:
-        """Mute the volume."""
+        """Mute the media player."""
         if FeatureFlag.COMMANDS_ZONE_MUTE_OFF_ON in self._client.supported_features:
             if mute:
                 await self._zone.mute()
