@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from aiorussound.const import FeatureFlag
 from aiorussound.exceptions import CommandError
-from aiorussound.rio.models import PlayStatus, SourceType
+from aiorussound.rio.models import PlayStatus
 import pytest
 
 from homeassistant.components.media_player import (
@@ -279,16 +279,13 @@ async def test_media_seek(
     )
 
 
-async def test_media_streamer_transport_controls(
+async def test_transport_controls(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_russound_client: AsyncMock,
 ) -> None:
-    """Test transport controls are exposed for Russound media streamers."""
+    """Test transport controls are exposed for Russound zones."""
     zone = mock_russound_client.controllers[1].zones[1]
-    zone.fetch_current_source.side_effect = None
-    zone.fetch_current_source.return_value = mock_russound_client.sources[2]
-    assert mock_russound_client.sources[2].type == SourceType.RUSSOUND_MEDIA_STREAMER
 
     await setup_integration(hass, mock_config_entry)
 
