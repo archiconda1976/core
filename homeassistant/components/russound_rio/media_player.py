@@ -267,6 +267,12 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         """Return whether zone is muted."""
         return self._zone.is_mute
 
+    @property
+    @override
+    def supported_features(self) -> MediaPlayerEntityFeature:
+        """Return the supported RIO zone controls."""
+        return self._BASE_SUPPORTED_FEATURES
+
     @command
     @override
     async def async_turn_off(self) -> None:
