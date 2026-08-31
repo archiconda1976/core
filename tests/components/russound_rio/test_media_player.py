@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from aiorussound.const import FeatureFlag
 from aiorussound.exceptions import CommandError
-from aiorussound.rio.models import PlayStatus
+from aiorussound.rio.models import PlayStatus, SourceType
 import pytest
 
 from homeassistant.components.media_player import (
@@ -16,6 +16,12 @@ from homeassistant.components.media_player import (
     ATTR_MEDIA_VOLUME_LEVEL,
     ATTR_MEDIA_VOLUME_MUTED,
     DOMAIN as MP_DOMAIN,
+    MediaPlayerEntityFeature,
+    SERVICE_MEDIA_NEXT_TRACK,
+    SERVICE_MEDIA_PAUSE,
+    SERVICE_MEDIA_PLAY,
+    SERVICE_MEDIA_PREVIOUS_TRACK,
+    SERVICE_MEDIA_STOP,
     SERVICE_PLAY_MEDIA,
     SERVICE_SELECT_SOURCE,
 )
@@ -34,6 +40,7 @@ from homeassistant.components.russound_rio.const import (
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_SUPPORTED_FEATURES,
     SERVICE_MEDIA_SEEK,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
@@ -270,6 +277,45 @@ async def test_media_seek(
     mock_russound_client.controllers[1].zones[1].set_seek_time.assert_called_once_with(
         100
     )
+
+
+async def test_media_streamer_transport_controls(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_russound_client: AsyncMock,
+) -> None:
+    """Test transport controls are exposed for Russound media streamers."""
+    zone = mock_russound_client.controllers[1].zones[1]
+    zone.fetch_current_source.side_effect = None
+    zone.fetch_current_source.return_value = mock_russound_client.sources[2]
+    assert mock_russound_client.sources[2].type == SourceType.RUSSOUND_MEDIA_STREAMER
+
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(ENTITY_ID_ZONE_1)
+    assert state
+    supported_features = MediaPlayerEntityFeature(state.attributes[ATTR_SUPPORTED_FEATURES])
+    assert supported_features & MediaPlayerEntityFeature.PLAY
+    assert supported_features & MediaPlayerEntityFeature.PAUSE
+    assert supported_features & MediaPlayerEntityFeature.STOP
+    assert supported_features & MediaPlayerEntityFeature.NEXT_TRACK
+    assert supported_features & MediaPlayerEntityFeature.PREVIOUS_TRACK
+
+    data = {ATTR_ENTITY_ID: ENTITY_ID_ZONE_1}
+    for service in (
+        SERVICE_MEDIA_PLAY,
+        SERVICE_MEDIA_PAUSE,
+        SERVICE_MEDIA_STOP,
+        SERVICE_MEDIA_NEXT_TRACK,
+        SERVICE_MEDIA_PREVIOUS_TRACK,
+    ):
+        await hass.services.async_call(MP_DOMAIN, service, data, blocking=True)
+
+    zone.play.assert_awaited_once()
+    zone.pause.assert_awaited_once()
+    zone.stop.assert_awaited_once()
+    zone.next.assert_awaited_once()
+    zone.previous.assert_awaited_once()
 
 
 async def test_play_media_preset_item_id(

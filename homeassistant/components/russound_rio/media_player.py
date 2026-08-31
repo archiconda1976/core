@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, override
 
 from aiorussound.const import FeatureFlag
 from aiorussound.rio import Controller, Source
-from aiorussound.rio.models import PlayStatus
+from aiorussound.rio.models import PlayStatus, SourceType
 from aiorussound.util import is_feature_supported
 import voluptuous as vol
 
@@ -124,7 +124,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
 
     _attr_device_class = MediaPlayerDeviceClass.SPEAKER
     _attr_media_content_type = MediaType.MUSIC
-    _attr_supported_features = (
+    _BASE_SUPPORTED_FEATURES = (
         MediaPlayerEntityFeature.BROWSE_MEDIA
         | MediaPlayerEntityFeature.VOLUME_SET
         | MediaPlayerEntityFeature.VOLUME_STEP
@@ -134,6 +134,13 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.SELECT_SOURCE
         | MediaPlayerEntityFeature.SEEK
         | MediaPlayerEntityFeature.PLAY_MEDIA
+    )
+    _STREAMER_SUPPORTED_FEATURES = (
+        MediaPlayerEntityFeature.PLAY
+        | MediaPlayerEntityFeature.PAUSE
+        | MediaPlayerEntityFeature.STOP
+        | MediaPlayerEntityFeature.NEXT_TRACK
+        | MediaPlayerEntityFeature.PREVIOUS_TRACK
     )
     _attr_name = None
 
@@ -261,6 +268,15 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         """Return whether zone is muted."""
         return self._zone.is_mute
 
+    @property
+    @override
+    def supported_features(self) -> MediaPlayerEntityFeature:
+        """Return features supported by the currently selected source."""
+        features = self._BASE_SUPPORTED_FEATURES
+        if self._source.type == SourceType.RUSSOUND_MEDIA_STREAMER:
+            features |= self._STREAMER_SUPPORTED_FEATURES
+        return features
+
     @command
     @override
     async def async_turn_off(self) -> None:
@@ -321,6 +337,36 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     async def async_media_seek(self, position: float) -> None:
         """Seek to a position in the current media."""
         await self._zone.set_seek_time(int(position))
+
+    @command
+    @override
+    async def async_media_play(self) -> None:
+        """Resume playback on a Russound media streamer."""
+        await self._zone.play()
+
+    @command
+    @override
+    async def async_media_pause(self) -> None:
+        """Pause playback on a Russound media streamer."""
+        await self._zone.pause()
+
+    @command
+    @override
+    async def async_media_stop(self) -> None:
+        """Stop playback on a Russound media streamer."""
+        await self._zone.stop()
+
+    @command
+    @override
+    async def async_media_previous_track(self) -> None:
+        """Skip to the previous item on a Russound media streamer."""
+        await self._zone.previous()
+
+    @command
+    @override
+    async def async_media_next_track(self) -> None:
+        """Skip to the next item on a Russound media streamer."""
+        await self._zone.next()
 
     @command
     async def async_save_favorite(
