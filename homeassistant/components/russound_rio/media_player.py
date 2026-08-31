@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, override
 
 from aiorussound.const import FeatureFlag
 from aiorussound.rio import Controller, Source
-from aiorussound.rio.models import PlayStatus, SourceType
+from aiorussound.rio.models import PlayStatus
 from aiorussound.util import is_feature_supported
 import voluptuous as vol
 
@@ -134,9 +134,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.SELECT_SOURCE
         | MediaPlayerEntityFeature.SEEK
         | MediaPlayerEntityFeature.PLAY_MEDIA
-    )
-    _STREAMER_SUPPORTED_FEATURES = (
-        MediaPlayerEntityFeature.PLAY
+        | MediaPlayerEntityFeature.PLAY
         | MediaPlayerEntityFeature.PAUSE
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.NEXT_TRACK
@@ -225,7 +223,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @property
     @override
     def media_album_name(self) -> str | None:
-        """Album name of current playing media, music track only."""
+        """Album name of current playing media."""
         return self._source.album_name
 
     @property
@@ -255,11 +253,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @property
     @override
     def volume_level(self) -> float:
-        """Volume level of the media player (0..1).
-
-        Value is returned based on a range (0..50).
-        Therefore float divide by 50 to get to the required range.
-        """
+        """Return the volume level."""
         return self._zone.volume / 50.0
 
     @property
@@ -267,15 +261,6 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     def is_volume_muted(self) -> bool:
         """Return whether zone is muted."""
         return self._zone.is_mute
-
-    @property
-    @override
-    def supported_features(self) -> MediaPlayerEntityFeature:
-        """Return features supported by the currently selected source."""
-        features = self._BASE_SUPPORTED_FEATURES
-        if self._source.type == SourceType.RUSSOUND_MEDIA_STREAMER:
-            features |= self._STREAMER_SUPPORTED_FEATURES
-        return features
 
     @command
     @override
@@ -321,7 +306,7 @@ class RussoundZoneDevice(RussoundBaseEntity, MediaPlayerEntity):
     @command
     @override
     async def async_mute_volume(self, mute: bool) -> None:
-        """Mute the media player."""
+        """Mute the volume."""
         if FeatureFlag.COMMANDS_ZONE_MUTE_OFF_ON in self._client.supported_features:
             if mute:
                 await self._zone.mute()
